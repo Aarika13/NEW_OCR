@@ -3,8 +3,10 @@ from flask import render_template
 from flask import send_from_directory
 from flask import request, redirect, url_for, flash
 from werkzeug.utils import secure_filename
+# import jsonify
 import os
 import easyocr
+import pytesseract
 import PyPDF2
 import pandas as pd
 from pymongo import MongoClient
@@ -23,12 +25,24 @@ def process_file(file_path):
     return text
 
 def process_image(image):
-    text = ""
-    reader = easyocr.Reader(['en'])
-    result = reader.readtext(file_path, detail=0, paragraph=True)
-    for line in result:
-        print(line)
-        text = line
+    try:
+        text = ""
+        reader = easyocr.Reader(['en'])
+        result = reader.readtext(file_path, detail=0, paragraph=True)
+        for line in result:
+            print(line)
+            text = line
+        
+    except Exception as e:
+        # print("EasyOCR failed:", e)
+        # print("Falling back to PyTesseract OCR...")
+        try:
+#           grayscale_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            text = pytesseract.image_to_string(image)
+            print(text)
+        except Exception as e:
+            print("PyTesseract OCR failed:", e)
+
     return text
 
 def process_pdf(file_path):
@@ -44,19 +58,45 @@ def process_pdf(file_path):
 
             for line in lines:
                 if line.strip():  # Exclude empty lines
-                    text += line + "\n"
+                    text += line + " \n "
 
     return text
 
-    
-
 def process_directory(input_dir, output_dir):
-    pass
-
+    df = pd.DataFrame(columns=[])
+    for root, dirs, filenames in os.walk(input_dir):
+        for filename in filenames:
+            input_path = os.path.join(input_dir, filename)
+            text = process_file(input_path)
+            print(text)
+            print("Processed text:")
+            doc = nlp(text)
+            mylist = []
+            for ent in doc.ents:
+                print(ent.text, ent.label_)
+                mylist.append([ent.text, ent.label_])
+            type_bill = ','.join(i[0] for i in mylist if i[1] == 'TYPE_OF_BILL')
+            name = ','.join(i[0] for i in mylist if i[1] == 'NAME')
+            invoice = ','.join(i[0] for i in mylist if i[1] == 'INVOICE/BILL_NO')
+            email = ','.join(i[0] for i in mylist if i[1] == 'EMAIL')
+            date = ','.join(i[0] for i in mylist if i[1] == 'DATE')
+            description = ','.join(i[0] for i in mylist if i[1] == 'DESCRIPTION')
+            amount = ','.join(i[0] for i in mylist if i[1] == 'AMOUNT')
+            tax = ','.join(i[0] for i in mylist if i[1] == 'RATE')
+            quantity = ','.join(i[0] for i in mylist if i[1] == 'QUANTITY')
+            mobile = ','.join(i[0] for i in mylist if i[1] == 'MOBILE_No')
+            state = ','.join(i[0] for i in mylist if i[1] == 'STATE')
+            address = ','.join(i[0] for i in mylist if i[1] == 'ADDRESS')
+            time = ','.join(i[0] for i in mylist if i[1] == 'TIME')
+            country = ','.join(i[0] for i in mylist if i[1] == 'COUNTRY')
+            tax_type = ','.join(i[0] for i in mylist if i[1] == 'TAX_TYPE')
+            
+    return df   
+            
 # data-base CONNECTIONS  
 def insert_data_mongo(data):
-    # client = MongoClient("mongodb+srv://aarika:ajain%40012023@cluster0.y932s1f.mongodb.net/OCR") # connect to MongoDB
-    client = MongoClient("mongodb://127.0.0.1:27017/?directConnection=true&serverSelectionTimeoutMS=2000&appName=mongosh+1.9.1")
+    client = MongoClient("mongodb+srv://aarika:ajain%40012023@cluster0.y932s1f.mongodb.net/OCR") # connect to MongoDB
+    # client = MongoClient("mongodb://127.0.0.1:27017/?directConnection=true&serverSelectionTimeoutMS=2000&appName=mongosh+1.9.1")
     db = client["OCR"]  # get the database
     collection = db["my_collection"]  # get the collection
     data = data.to_dict(orient="records")
@@ -70,8 +110,8 @@ UPLOAD_FOLDER = '/home/aarika/Desktop/OCR/uploads/'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'pdf'}
 
 app = Flask(__name__, template_folder="templates")
-file_handler = FileHandler('errorlog.txt')
-file_handler.setLevel(WARNING)
+# file_handler = FileHandler('errorlog.txt')
+# file_handler.setLevel(WARNING)
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
@@ -117,12 +157,12 @@ def download_file(name):
 @app.route("/process_data", methods=['GET', 'POST'])
 def process_data_route():
     # print(df)
-    input_dir = r"/home/sunil/Desktop/np/uploads/"
-    output_dir = r"/home/sunil/Desktop/np/special/"
+    input_dir = r"/home/aarika/Desktop/OCR/uploads/"
+    output_dir = r"/home/aarika/Desktop/OCR/special/"
     df = process_directory(input_dir, output_dir)
     insert_data_mongo(df)
     # return "Data processed and stored in MongoDB!"
-    my_data = df.to_html('/home/sunil/Desktop/np/templates/output.html')
+    my_data = df.to_html('/home/aarika/Desktop/OCR/templates/output.html')
     return render_template('output.html', table=my_data)
 
 
