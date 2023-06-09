@@ -5,14 +5,19 @@ from flask import request, redirect, url_for, flash
 from werkzeug.utils import secure_filename
 # import jsonify
 import os
+import shutil
 import easyocr
 import pytesseract
 import PyPDF2
 import pandas as pd
 from pymongo import MongoClient
+import spacy
+# file imported of extracted data
+# from comp_name import extract_company_name
+# from amount import extract_amount
+# from date import dates
 
-
-# nlp = spacy.load("/home/aarika/Desktop/OCR/model-best")
+nlp = spacy.load("/home/aarika/Desktop/OCR/model-best")
 
 def process_file(file_path):
     text = ""
@@ -28,21 +33,18 @@ def process_image(image):
     try:
         text = ""
         reader = easyocr.Reader(['en'])
-        result = reader.readtext(file_path, detail=0, paragraph=True)
+        result = reader.readtext(image, detail=0, paragraph=True)
         for line in result:
             print(line)
             text = line
         
     except Exception as e:
-        # print("EasyOCR failed:", e)
-        # print("Falling back to PyTesseract OCR...")
         try:
 #           grayscale_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
             text = pytesseract.image_to_string(image)
             print(text)
         except Exception as e:
             print("PyTesseract OCR failed:", e)
-
     return text
 
 def process_pdf(file_path):
@@ -62,36 +64,70 @@ def process_pdf(file_path):
 
     return text
 
-def process_directory(input_dir, output_dir):
-    df = pd.DataFrame(columns=[])
+def process_directory(input_dir,output_dir):
+    # data = []
+    print(user)
+    df1 = pd.DataFrame(columns=["TYPE_OF_BILL","NAME","COMPANY_NAME","INVOICE_NO","DATE","TAX_TYPE","TAX_RATE","DESCRIPTION","AMOUNT","ADDRESS","STATE","COUNTRY","EMAIL","MOBILE","TIME"])
     for root, dirs, filenames in os.walk(input_dir):
+    # for filenames in os.walk(input_dir):
         for filename in filenames:
             input_path = os.path.join(input_dir, filename)
             text = process_file(input_path)
-            print(text)
+            # print(text)
             print("Processed text:")
             doc = nlp(text)
             mylist = []
             for ent in doc.ents:
                 print(ent.text, ent.label_)
                 mylist.append([ent.text, ent.label_])
+            print(mylist)
             type_bill = ','.join(i[0] for i in mylist if i[1] == 'TYPE_OF_BILL')
             name = ','.join(i[0] for i in mylist if i[1] == 'NAME')
+            comp_name = ','.join(i[0] for i in mylist if i[1] == 'COMPANY_NAME')
             invoice = ','.join(i[0] for i in mylist if i[1] == 'INVOICE/BILL_NO')
-            email = ','.join(i[0] for i in mylist if i[1] == 'EMAIL')
             date = ','.join(i[0] for i in mylist if i[1] == 'DATE')
+            tax_type = ','.join(i[0] for i in mylist if i[1] == 'TAX_TYPE')
+            tax = ','.join(i[0] for i in mylist if i[1] == 'TAX_RATE')
             description = ','.join(i[0] for i in mylist if i[1] == 'DESCRIPTION')
             amount = ','.join(i[0] for i in mylist if i[1] == 'AMOUNT')
-            tax = ','.join(i[0] for i in mylist if i[1] == 'RATE')
-            quantity = ','.join(i[0] for i in mylist if i[1] == 'QUANTITY')
-            mobile = ','.join(i[0] for i in mylist if i[1] == 'MOBILE_No')
-            state = ','.join(i[0] for i in mylist if i[1] == 'STATE')
             address = ','.join(i[0] for i in mylist if i[1] == 'ADDRESS')
-            time = ','.join(i[0] for i in mylist if i[1] == 'TIME')
             country = ','.join(i[0] for i in mylist if i[1] == 'COUNTRY')
-            tax_type = ','.join(i[0] for i in mylist if i[1] == 'TAX_TYPE')
-            
-    return df   
+            state = ','.join(i[0] for i in mylist if i[1] == 'STATE')
+            # quantity = ','.join(i[0] for i in mylist if i[1] == 'QUANTITY')
+            email = ','.join(i[0] for i in mylist if i[1] == 'EMAIL')
+            mobile = ','.join(i[0] for i in mylist if i[1] == 'MOBILE_No')
+            time = ','.join(i[0] for i in mylist if i[1] == 'TIME')
+            if user == 'zoho':
+                row = pd.DataFrame([[type_bill, name, comp_name, invoice,date, tax_type, tax, description,amount,address,state,country,email,mobile, time]],columns=["TYPE_OF_BILL","NAME","COMPANY_NAME","INVOICE_NO","DATE","TAX_TYPE","TAX_RATE","DESCRIPTION","AMOUNT","ADDRESS","STATE","COUNTRY","EMAIL","MOBILE","TIME"])
+                df2 = pd.concat([df1,row])
+                print(df2)
+            elif user == 'tally':
+                row = pd.DataFrame([[type_bill, name, comp_name, invoice,date, tax_type, tax, description,amount,address,state,country,email,mobile, time]],columns=["TYPE_OF_BILL","NAME","COMPANY_NAME","INVOICE_NO","DATE","TAX_TYPE","TAX_RATE","DESCRIPTION","AMOUNT","ADDRESS","STATE","COUNTRY","EMAIL","MOBILE","TIME"])
+                df2 = pd.concat([df1,row])
+                print(df2)
+            elif user == 'q-book':
+                row = pd.DataFrame([[type_bill, name, comp_name, invoice,date, tax_type, tax, description,amount,address,state,country,email,mobile, time]],columns=["TYPE_OF_BILL","NAME","COMPANY_NAME","INVOICE_NO","DATE","TAX_TYPE","TAX_RATE","DESCRIPTION","AMOUNT","ADDRESS","STATE","COUNTRY","EMAIL","MOBILE","TIME"])
+                df2 = pd.concat([df1,row])
+                print(df2)
+            else:
+                row = pd.DataFrame([[type_bill, name, comp_name, invoice,date, tax_type, tax, description,amount,address,state,country,email,mobile, time]],columns=["TYPE_OF_BILL","NAME","COMPANY_NAME","INVOICE_NO","DATE","TAX_TYPE","TAX_RATE","DESCRIPTION","AMOUNT","ADDRESS","STATE","COUNTRY","EMAIL","MOBILE","TIME"])
+                df2 = pd.concat([df1,row])
+                print(df2)
+            output_path = r"output.html"
+            # output_path = os.path.join(output_dir, filename)
+            with open(output_path, 'w') as f:
+                f.write(f'<html><body><img src="{filename}"><br><pre>{text}</pre></body></html>')
+                # f.write(text)
+            shutil.move(input_path, output_path)
+            print(f"Moved file to {output_path}")
+    return df2   
+
+# def extracted_data():
+#     amount = extract_amount(amount)
+#     date = dates(date)
+#     comp_name = extract_company_name(comp_name)
+#     df = pd.DataFrame(columns=[])
+#     return df
             
 # data-base CONNECTIONS  
 def insert_data_mongo(data):
@@ -159,10 +195,10 @@ def process_data_route():
     # print(df)
     input_dir = r"/home/aarika/Desktop/OCR/uploads/"
     output_dir = r"/home/aarika/Desktop/OCR/special/"
-    df = process_directory(input_dir, output_dir)
-    insert_data_mongo(df)
+    df2 = process_directory(input_dir, output_dir)
+    insert_data_mongo(df2)
     # return "Data processed and stored in MongoDB!"
-    my_data = df.to_html('/home/aarika/Desktop/OCR/templates/output.html')
+    my_data = df2.to_html('/home/aarika/Desktop/OCR/templates/output.html')
     return render_template('output.html', table=my_data)
 
 
@@ -171,4 +207,5 @@ app.add_url_rule(
 )
 
 if __name__ == '__main__':
+    # flask.Flask.run()
     app.run(host='0.0.0.0', port=5000, debug=True)
